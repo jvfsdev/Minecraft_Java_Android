@@ -112,9 +112,17 @@ object MicrosoftAuth {
         val uhs = xsts.jsonObject["DisplayClaims"]!!.jsonObject["xui"]!!.jsonArray[0].jsonObject["uhs"]!!.jsonPrimitive.content
 
         // Minecraft access token
-        val mc = Http.postJson("https://api.minecraftservices.com/launcher/login", buildJsonObject {
-            put("xtoken", "XBL3.0 x=$uhs;$xstsToken"); put("platform", "PC_LAUNCHER")
-        })
+        val mc = try {
+            Http.postJson("https://api.minecraftservices.com/launcher/login", buildJsonObject {
+                put("xtoken", "XBL3.0 x=$uhs;$xstsToken"); put("platform", "PC_LAUNCHER")
+            })
+        } catch (e: HttpException) {
+            // Microsoft and Xbox accepted the account; Mojang rejects client IDs it has not allow-listed.
+            if (e.code == 403) throw AuthError(
+                "Microsoft sign-in worked, but Mojang has not approved this app's client ID yet " +
+                    "(api.minecraftservices.com returned 403). Wait for the approval from aka.ms/mce-reviewappid.")
+            throw e
+        }
         val mcToken = mc.str("access_token")
         val mcExpires = System.currentTimeMillis() + mc.str("expires_in").toLong() * 1000
         val bearer = mapOf("Authorization" to "Bearer $mcToken")

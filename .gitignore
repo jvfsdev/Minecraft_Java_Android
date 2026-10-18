@@ -1,0 +1,23 @@
+# Gradle / Android Studio
+.gradle/
+.kotlin/
+build/
+app/.cxx/
+local.properties
+.idea/
+*.iml
+
+# Fetched sources and native build outputs (recreated by native/*.sh)
+native/src/
+native/out/
+native/*.log
+app/src/main/jniLibs/
+app/src/main/assets/runtime/
+
+# SDL's Java glue is copied in by native/build-natives.sh; only our file is tracked
+app/src/main/java/org/libsdl/app/*
+!app/src/main/java/org/libsdl/app/PrismDroidInput.java
+
+# never commit signing material
+*.jks
+*.keystore

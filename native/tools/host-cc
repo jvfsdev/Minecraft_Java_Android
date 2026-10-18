@@ -1,0 +1,11 @@
+#!/bin/bash
+# Host (macOS) compiler wrapper for OpenJDK build tools when cross-compiling to Linux/Android:
+# drops GNU-ld-only flags that the configure scripts derive from the *target* OS.
+args=()
+for a in "$@"; do
+  case "$a" in
+    -Wl,--disable-new-dtags|-Wl,-rpath,\$ORIGIN*|-Wl,-z,*|-static-libgcc|-Wl,--hash-style=*|-Wl,--as-needed|-Wl,--no-as-needed|-Wl,-O1|-Wl,--exclude-libs,*|-Wl,--gc-sections|-Wl,--allow-shlib-undefined|-Wl,--no-undefined) ;;
+    *) args+=("$a") ;;
+  esac
+done
+exec /usr/bin/${HOST_CC_TOOL:-clang} "${args[@]}"

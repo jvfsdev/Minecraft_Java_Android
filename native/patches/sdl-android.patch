@@ -1,0 +1,25 @@
+diff --git a/src/video/android/SDL_androidwindow.c b/src/video/android/SDL_androidwindow.c
+index 4652b5f..55c2f69 100644
+--- a/src/video/android/SDL_androidwindow.c
++++ b/src/video/android/SDL_androidwindow.c
+@@ -56,8 +56,8 @@ bool Android_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
+     // Adjust the window data to match the screen
+     window->x = 0;
+     window->y = 0;
+-    window->w = Android_SurfaceWidth;
+-    window->h = Android_SurfaceHeight;
++    /* PrismDroid: keep the requested size here and report the real surface size with a
++       RESIZED event below, so apps that track their size from events (Minecraft) see it. */
+ 
+     // One window, it always has focus
+     SDL_SetMouseFocus(window);
+@@ -97,6 +97,9 @@ bool Android_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
+ 
+     window->internal = data;
+     Android_Window = window;
++    if (Android_SurfaceWidth > 0 && Android_SurfaceHeight > 0) {
++        SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESIZED, Android_SurfaceWidth, Android_SurfaceHeight);
++    }
+ 
+ endfunction:
+ 

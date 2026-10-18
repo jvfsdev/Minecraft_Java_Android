@@ -1,0 +1,142 @@
+diff --git a/make/autoconf/basic.m4 b/make/autoconf/basic.m4
+index 2d3e071dd..265c6a352 100644
+--- a/make/autoconf/basic.m4
++++ b/make/autoconf/basic.m4
+@@ -389,7 +389,7 @@ AC_DEFUN_ONCE([BASIC_SETUP_DEVKIT],
+       [UTIL_PREPEND_TO_PATH([EXTRA_PATH],$with_extra_path)]
+   )
+ 
+-  if test "x$OPENJDK_BUILD_OS" = "xmacosx"; then
++  if test "x$OPENJDK_TARGET_OS" = "xmacosx"; then
+     BASIC_SETUP_XCODE_SYSROOT
+   fi
+ 
+diff --git a/make/autoconf/jdk-options.m4 b/make/autoconf/jdk-options.m4
+index c4d203aff..9242b8fa4 100644
+--- a/make/autoconf/jdk-options.m4
++++ b/make/autoconf/jdk-options.m4
+@@ -199,6 +199,10 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JDK_OPTIONS],
+   if test "x$OPENJDK_TARGET_CPU" = xs390x ; then
+     INCLUDE_SA=false
+   fi
++  # Android (bionic): no procfs core-dump structs; SA is a debugging tool we do not ship.
++  if test "x$OPENJDK_TARGET_OS" = xlinux && test "x$OPENJDK_TARGET_CPU" = xaarch64 && test "x$OPENJDK_TARGET_LIBC" != xgnu ; then
++    INCLUDE_SA=false
++  fi
+   AC_SUBST(INCLUDE_SA)
+ 
+   # Setup default CDS alignment. On platforms where one build may run on machines with different
+diff --git a/make/autoconf/libraries.m4 b/make/autoconf/libraries.m4
+index 5daacdc1c..43b446360 100644
+--- a/make/autoconf/libraries.m4
++++ b/make/autoconf/libraries.m4
+@@ -76,7 +76,7 @@ AC_DEFUN_ONCE([LIB_DETERMINE_DEPENDENCIES],
+ 
+   # Check if alsa is needed
+   if test "x$OPENJDK_TARGET_OS" = xlinux; then
+-    NEEDS_LIB_ALSA=true
++    NEEDS_LIB_ALSA=false
+   else
+     NEEDS_LIB_ALSA=false
+   fi
+diff --git a/make/modules/java.desktop/Lib.gmk b/make/modules/java.desktop/Lib.gmk
+index 830e0553c..04354c1c4 100644
+--- a/make/modules/java.desktop/Lib.gmk
++++ b/make/modules/java.desktop/Lib.gmk
+@@ -37,7 +37,7 @@ $(call FillFindCache, $(wildcard $(TOPDIR)/src/java.desktop/*/native))
+ include lib/AwtLibraries.gmk
+ include lib/ClientLibraries.gmk
+ 
+-ifeq ($(call isTargetOs, aix), false)
++ifeq ($(call isTargetOs, aix linux), false)
+   ##############################################################################
+   # Build libjsound
+   ##############################################################################
+diff --git a/src/hotspot/os/linux/os_linux.cpp b/src/hotspot/os/linux/os_linux.cpp
+index 3ef58971c..29120dd4c 100644
+--- a/src/hotspot/os/linux/os_linux.cpp
++++ b/src/hotspot/os/linux/os_linux.cpp
+@@ -137,7 +137,7 @@
+ 
+ #define MAX_PATH    (2 * K)
+ 
+-#ifdef MUSL_LIBC
++#if defined(MUSL_LIBC) && !defined(__ANDROID__)
+ // dlvsym is not a part of POSIX
+ // and musl libc doesn't implement it.
+ static void *dlvsym(void *handle,
+@@ -691,8 +691,8 @@ void os::init_system_properties_values() {
+ 
+ void os::Linux::libpthread_init() {
+   // Save glibc and pthread version strings.
+-#if !defined(_CS_GNU_LIBC_VERSION) || \
+-    !defined(_CS_GNU_LIBPTHREAD_VERSION)
++#if !defined(MUSL_LIBC) && (!defined(_CS_GNU_LIBC_VERSION) || \
++    !defined(_CS_GNU_LIBPTHREAD_VERSION))
+   #error "glibc too old (< 2.3.2)"
+ #endif
+ 
+@@ -2035,10 +2035,12 @@ const char* os::Linux::dll_path(void* lib) {
+   const char* l_path = nullptr;
+   assert(lib != nullptr, "dll_path parameter must not be null");
+ 
++#ifndef __ANDROID__
+   int res_dli = ::dlinfo(lib, RTLD_DI_LINKMAP, &lmap);
+   if (res_dli == 0) {
+     l_path = lmap->l_name;
+   }
++#endif // bionic has no dlinfo(); the path is only used for logging
+   return l_path;
+ }
+ 
+diff --git a/src/hotspot/share/utilities/elfFile.hpp b/src/hotspot/share/utilities/elfFile.hpp
+index 0caafc764..b2e82c715 100644
+--- a/src/hotspot/share/utilities/elfFile.hpp
++++ b/src/hotspot/share/utilities/elfFile.hpp
+@@ -46,7 +46,7 @@ typedef Elf64_Shdr      Elf_Shdr;
+ typedef Elf64_Phdr      Elf_Phdr;
+ typedef Elf64_Sym       Elf_Sym;
+ 
+-#if !defined(_ALLBSD_SOURCE) || defined(__APPLE__)
++#if (!defined(_ALLBSD_SOURCE) || defined(__APPLE__)) && !defined(__ANDROID__)
+ #define ELF_ST_TYPE ELF64_ST_TYPE
+ #endif
+ 
+@@ -62,7 +62,7 @@ typedef Elf32_Shdr      Elf_Shdr;
+ typedef Elf32_Phdr      Elf_Phdr;
+ typedef Elf32_Sym       Elf_Sym;
+ 
+-#if !defined(_ALLBSD_SOURCE) || defined(__APPLE__)
++#if (!defined(_ALLBSD_SOURCE) || defined(__APPLE__)) && !defined(__ANDROID__)
+ #define ELF_ST_TYPE ELF32_ST_TYPE
+ #endif
+ #endif
+diff --git a/src/java.base/unix/native/libjava/jni_util_md.c b/src/java.base/unix/native/libjava/jni_util_md.c
+index 7195b3def..3a0903af4 100644
+--- a/src/java.base/unix/native/libjava/jni_util_md.c
++++ b/src/java.base/unix/native/libjava/jni_util_md.c
+@@ -31,7 +31,11 @@
+ #include "jni_util.h"
+ #include "dlfcn.h"
+ 
+-#if defined(LINUX) && (defined(_GNU_SOURCE) || \
++#if defined(__ANDROID__)
++/* bionic: with _GNU_SOURCE, strerror_r is the GNU variant; the XSI one is exported as strerror_r */
++extern int __xsi_strerror_r(int, char *, size_t) __asm__("strerror_r");
++#define strerror_r(a, b, c) __xsi_strerror_r((a), (b), (c))
++#elif defined(LINUX) && (defined(_GNU_SOURCE) || \
+          (defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE < 200112L \
+              && defined(_XOPEN_SOURCE) && _XOPEN_SOURCE < 600))
+ extern int __xpg_strerror_r(int, char *, size_t);
+diff --git a/src/java.base/unix/native/libnet/net_util_md.h b/src/java.base/unix/native/libnet/net_util_md.h
+index 902cf9673..e6961ad3b 100644
+--- a/src/java.base/unix/native/libnet/net_util_md.h
++++ b/src/java.base/unix/native/libnet/net_util_md.h
+@@ -29,6 +29,7 @@
+ #include <netdb.h>
+ #include <poll.h>
+ #include <sys/socket.h>
++#include <netinet/in.h> /* bionic: not pulled in by sys/socket.h */
+ 
+ /************************************************************************
+  * Macros and constants

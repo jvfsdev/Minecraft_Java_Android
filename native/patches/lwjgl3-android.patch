@@ -1,0 +1,35 @@
+diff --git a/modules/lwjgl/core/src/main/c/linux/liburing/include/liburing/compat.h b/modules/lwjgl/core/src/main/c/linux/liburing/include/liburing/compat.h
+index 55e0d50..495baf1 100644
+--- a/modules/lwjgl/core/src/main/c/linux/liburing/include/liburing/compat.h
++++ b/modules/lwjgl/core/src/main/c/linux/liburing/include/liburing/compat.h
+@@ -3,6 +3,23 @@
+ #ifndef LIBURING_COMPAT_H
+ #define LIBURING_COMPAT_H
+ 
++#ifdef __ANDROID__
++
++#include <inttypes.h>
++#include <stdint.h>
++#include <sys/stat.h>
++#include <linux/ioctl.h>
++#include <linux/time_types.h>
++#include <linux/openat2.h>
++
++typedef int __kernel_rwf_t;
++
++#ifndef BLOCK_URING_CMD_DISCARD
++#define BLOCK_URING_CMD_DISCARD                        _IO(0x12, 0)
++#endif
++
++#else
++
+ #include <inttypes.h>
+ #include <stdint.h>
+ #include <sys/stat.h>
+@@ -30,4 +47,6 @@ struct open_how {
+ #define BLOCK_URING_CMD_DISCARD                        _IO(0x12, 0)
+ #endif
+ 
++#endif /* __ANDROID__ */
++
+ #endif
